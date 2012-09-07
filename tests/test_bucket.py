@@ -1,7 +1,7 @@
-from __future__ import with_statement
 
-import StringIO
-import urllib2
+
+import io
+import urllib.request, urllib.error, urllib.parse
 import unittest
 import datetime
 from nose.tools import eq_
@@ -52,7 +52,7 @@ class MiscTests(S3BucketTestCase):
     def test_error_in_error(self):
         # a hairy situation: an error arising during the parsing of an error.
         def read(bs=4096):
-            raise urllib2.URLError("something something dark side")
+            raise urllib.error.URLError("something something dark side")
         FP = type("ErringFP", (object,),
                   {"read": read, "readline": read, "readlines": read})
         url = g.bucket.base_url + "/foo.txt"
@@ -60,7 +60,7 @@ class MiscTests(S3BucketTestCase):
         g.bucket.add_resp_obj(resp, status="401 Something something")
         try:
             g.bucket.get("foo.txt")
-        except simples3.S3Error, e:
+        except simples3.S3Error as e:
             assert "read_error" in e.extra
 
     def test_aws_md5_lit(self):
@@ -107,7 +107,7 @@ class GetTests(S3BucketTestCase):
                           status="404 Not Found")
         try:
             g.bucket.get("foo.txt")
-        except simples3.KeyNotFound, e:
+        except simples3.KeyNotFound as e:
             eq_(e.key, "foo.txt")
             eq_(str(e), "The specified key does not exist. (code=404, "
                         "key='foo.txt', filename='http://johnsmith.s3."
@@ -152,7 +152,7 @@ class PutTests(S3BucketTestCase):
         g.streaming_bucket.add_resp("/%s" % key, g.H("application/xml"), "OK!")
 
         try:
-            fp = StringIO.StringIO()
+            fp = io.StringIO()
             fp.write(contents)
             g.streaming_bucket.put_file(key, fp, size=len(contents))
         finally:
@@ -218,7 +218,7 @@ class DeleteTests(S3BucketTestCase):
                           "<wat />", status="403 What's Up?")
         try:
             g.bucket.delete("foo.txt")
-        except simples3.S3Error, e:
+        except simples3.S3Error as e:
             eq_(e.extra.get("key"), "foo.txt")
             eq_(e.code, 403)
         else:
@@ -279,7 +279,7 @@ class ListDirTests(S3BucketTestCase):
              '"fba9dede5f27731c9771645a39863328"', 434234),
             ('my-third-image.jpg', datetime.datetime(2009, 10, 12, 17, 50, 30),
              '"1b2cf535f27731c974343645a3985328"', 64994))
-        next_reftup = iter(reftups).next
+        next_reftup = iter(reftups).__next__
         for tup in g.bucket.listdir():
             eq_(len(tup), 4)
             eq_(tup, next_reftup())

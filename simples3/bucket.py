@@ -1,17 +1,17 @@
 """Bucket manipulation"""
 
-from __future__ import absolute_import
+
 
 import time
 import hmac
 import hashlib
-import httplib
-import urllib2
+import http.client
+import urllib.request, urllib.error, urllib.parse
 import datetime
 import warnings
 from xml.etree import cElementTree as ElementTree
 from contextlib import contextmanager
-from urllib import quote_plus
+from urllib.parse import quote_plus
 from base64 import b64encode
 from cgi import escape
 
@@ -32,7 +32,7 @@ class S3Error(Exception):
         rv = self.msg
         if self.extra:
             rv += " ("
-            rv += ", ".join("%s=%r" % i for i in self.extra.iteritems())
+            rv += ", ".join("%s=%r" % i for i in self.extra.items())
             rv += ")"
         return rv
 
@@ -49,7 +49,7 @@ class S3Error(Exception):
             # as in chunked mode, but S3 gives an empty reply.
             try:
                 self.data = data = self.fp.read()
-            except (httplib.HTTPException, urllib2.URLError), e:
+            except (http.client.HTTPException, urllib.error.URLError) as e:
                 self.extra["read_error"] = e
             else:
                 data = data.decode("utf-8")
@@ -65,16 +65,16 @@ class KeyNotFound(S3Error, KeyError):
     @property
     def key(self): return self.extra.get("key")
 
-class StreamHTTPHandler(urllib2.HTTPHandler):
+class StreamHTTPHandler(urllib.request.HTTPHandler):
     pass
 
-class StreamHTTPSHandler(urllib2.HTTPSHandler):
+class StreamHTTPSHandler(urllib.request.HTTPSHandler):
     pass
 
-class AnyMethodRequest(urllib2.Request):
+class AnyMethodRequest(urllib.request.Request):
     def __init__(self, method, *args, **kwds):
         self.method = method
-        urllib2.Request.__init__(self, *args, **kwds)
+        urllib.request.Request.__init__(self, *args, **kwds)
 
     def get_method(self):
         return self.method
@@ -146,7 +146,7 @@ class S3Request(object):
             if self.args:
                 args = self.args
                 if hasattr(args, "iteritems"):
-                    args = args.iteritems()
+                    args = iter(args.items())
                 args = ((quote_plus(k), quote_plus(v)) for (k, v) in args)
                 args = arg_sep.join("%s=%s" % i for i in args)
                 ps.append(args)
@@ -254,7 +254,7 @@ class S3Bucket(object):
 
     @classmethod
     def build_opener(cls):
-        return urllib2.build_opener(StreamHTTPHandler, StreamHTTPSHandler)
+        return urllib.request.build_opener(StreamHTTPHandler, StreamHTTPSHandler)
 
     def request(self, *a, **k):
         k.setdefault("bucket", self.name)
@@ -262,14 +262,14 @@ class S3Bucket(object):
 
     def send(self, s3req):
         s3req.sign(self)
-        for retry_no in xrange(self.n_retries):
+        for retry_no in range(self.n_retries):
             req = s3req.urllib(self)
             try:
                 if self.timeout:
                     return self.opener.open(req, timeout=self.timeout)
                 else:
                     return self.opener.open(req)
-            except (urllib2.HTTPError, urllib2.URLError), e:
+            except (urllib.error.HTTPError, urllib.error.URLError) as e:
                 # If S3 gives HTTP 500, we should try again.
                 ecode = getattr(e, "code", None)
                 if ecode == 500:
@@ -300,7 +300,7 @@ class S3Bucket(object):
 
     def put(self, key, data=None, acl=None, metadata={}, mimetype=None,
             transformer=None, headers={}):
-        if isinstance(data, unicode):
+        if isinstance(data, str):
             data = data.encode(self.default_encoding)
         headers = headers.copy()
         if mimetype:
@@ -327,7 +327,7 @@ class S3Bucket(object):
             # does not, so treat errors and non-errors as equals.
             try:
                 resp = self.send(self.request(method="DELETE", key=keys[0]))
-            except KeyNotFound, e:
+            except KeyNotFound as e:
                 e.fp.close()
                 return False
             else:
@@ -440,7 +440,7 @@ class S3Bucket(object):
 
     def put_bucket(self, config_xml=None, acl=None):
         if config_xml:
-            if isinstance(config_xml, unicode):
+            if isinstance(config_xml, str):
                 config_xml = config_xml.encode("utf-8")
             headers = {"Content-Length": len(config_xml),
                        "Content-Type": "text/xml"}
